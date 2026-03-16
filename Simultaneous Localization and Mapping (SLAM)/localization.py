@@ -161,6 +161,18 @@ class Solution(Bot):
         self.heading  = angle_wrap(
             self.heading + (velocity / WHEELBASE) * np.tan(steering) * DT
         )
+        if len(self._assoc) == 0 or len(self.learned_map) == 0:
+        return
+        corrections = []
+        for i, idx in enumerate(self._assoc):
+            if idx < 0 or idx >= len(self.learned_map):
+                continue
+            error = self._global_meas[i] - np.array(self.learned_map[idx])
+            corrections.append(error)
+
+        if corrections:
+            self.pos += 0.3 * np.mean(corrections, axis=0)
+
 
 
 # ── Problem 2 – Localization ───────────────────────────────────────────────────

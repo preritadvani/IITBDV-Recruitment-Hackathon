@@ -168,11 +168,38 @@ class Solution(Bot):
         """
         if len(measurements) == 0:
             return
-        gm = local_to_global(measurements, self.pos, self.heading)
-        for p in gm:
-            if not self.learned_map or \
-               min(np.linalg.norm(p - q) for q in self.learned_map) > 2.0:
-                self.learned_map.append(p.copy())
+
+        gm    = self._global_meas   # already computed in data_association
+        assoc = self._assoc
+        R     = np.eye(2) * NOISE_STD**2
+    
+        for i, idx in enumerate(assoc):
+            obs = gm[i]
+    
+            if idx == -1:
+                self.map_means.append(obs.copy())
+                self.map_covs.append(np.eye(2) * (NOISE_STD * 5)**2)
+                self.map_hits.append(1)
+    
+            else:
+                mu = self.map_means[idx]
+                P  = self.map_covs[idx]
+    
+                y = obs - mu              # innovation
+                S = P + R                 # innovation covariance
+                K = P @ np.linalg.inv(S)  # Kalman gain
+    
+                self.map_means[idx] = mu + K @ y
+                self.map_covs[idx]  = (np.eye(2) - K) @ P
+                self.map_hits[idx] += 1
+    
+        confirmed = [
+            (m, c, h)
+            for m, c, h in zip(self.map_means, self.map_covs, self.map_hits)
+            if h >= 2
+        ]
+        if confirmed:
+            self.map_means, self.map_covs, self.map_hits = map(list, zip(*confirmed))
 
 # ── Problem 3 – Mapping ───────────────────────────────────────────────────────
 def make_problem3():

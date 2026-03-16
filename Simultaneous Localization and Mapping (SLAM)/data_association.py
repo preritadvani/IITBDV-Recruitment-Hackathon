@@ -162,24 +162,35 @@ class Solution(Bot):
 
     # ------------------------------------------------------------------
     def data_association(self, measurements, current_map):
-        """
-        Nearest-Neighbour data association.
-        Steps:
-          1. Transform local measurements → world frame using current pose.
-          2. For each measurement find the nearest cone in *current_map*.
-        Returns an int array of indices into current_map.
-        """
+    
         if len(measurements) == 0 or len(current_map) == 0:
             self._global_meas = np.zeros((0, 2))
-            self._assoc       = np.array([], dtype=int)
+            self._assoc = np.full(len(measurements), -1, dtype=int)
             return self._assoc
+    
 
         gm = local_to_global(measurements, self.pos, self.heading)
         self._global_meas = gm
+    
+        map_arr = np.array(current_map)
 
-        D           = distance.cdist(gm, current_map)
-        self._assoc = np.argmin(D, axis=1)
-        return self._assoc
+        R_inv = np.eye(2) / (NOISE_STD ** 2)
+        cost  = distance.cdist(gm, map_arr, metric='mahalanobis', VI=R_inv)
+    
+        GATE       = 2.45
+        cost_gated = np.where(cost < GATE, cost, 1e9)
+    
+
+        row_ind, col_ind = linear_sum_assignment(cost_gated)
+    
+
+        assoc = np.full(len(gm), -1, dtype=int)
+        for r, c in zip(row_ind, col_ind):
+            if cost[r, c] < GATE:
+                assoc[r] = c
+    
+        self._assoc = assoc
+        return assoc
 
 # ── Problem 1 – Data Association ──────────────────────────────────────────────
 def make_problem1():

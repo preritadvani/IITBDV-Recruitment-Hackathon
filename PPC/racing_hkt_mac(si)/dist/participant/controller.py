@@ -14,34 +14,72 @@ You must implement two functions: plan() and control()
 import numpy as np
 
 
-
 def steering(path: list[dict], state: dict):
+    L = 2.6 
+    curr_x, curr_y = state['x'], state['y']
+    curr_yaw = state['yaw'] 
+    
 
-    length_of_car = 2.6
-    # Calculate steering angle based on path and vehicle state
+    dists = [np.hypot(p['x'] - curr_x, p['y'] - curr_y) for p in path]
+    closest_idx = np.argmin(dists)
+    
 
+    speed = np.hypot(state['vx'], state['vy'])
+    look_ahead = np.clip(3.0 + 0.4 * speed, 4.0, 12.0)
+    
+    target_idx = closest_idx
+    for i in range(closest_idx, len(path)):
+        if dists[i] > look_ahead:
+            target_idx = i
+            break
+    target_p = path[target_idx]
 
+    p_near = path[closest_idx]
+    p_next = path[min(closest_idx + 1, len(path)-1)]
+    
 
+    path_dx = p_next['x'] - p_near['x']
+    path_dy = p_next['y'] - p_near['y']
+    
+    car_dx = curr_x - p_near['x']
+    car_dy = curr_y - p_near['y']
 
+    mag = np.hypot(path_dx, path_dy) + 1e-6
+    cte = (car_dy * path_dx - car_dx * path_dy) / mag
 
+    dx = target_p['x'] - curr_x
+    dy = target_p['y'] - curr_y
+    target_angle = np.arctan2(dy, dx)
+    
+    alpha = target_angle - curr_yaw
+    alpha = (alpha + np.pi) % (2 * np.pi) - np.pi 
 
-    steer = 0.0 # Default steer value
-    # 0.5 in the max steering angle in radians (about 28.6 degrees)
+    steer = np.arctan2(2.0 * L * np.sin(alpha), look_ahead)
+    
+
+    cte_gain = 0.3
+    steer -= (cte * cte_gain)
+    prev_steer = state.get('prev_steer', 0.0)
+
+    steer = 0.3 * prev_steer + 0.7 * steer 
+    state['prev_steer'] = steer
     return np.clip(steer, -0.5, 0.5)
 
-
 def throttle_algorithm(target_speed, current_speed, dt):
+    kp=1.0
 
-
-
+    error=target_speed-current_speed
+    if error > 0:
+        throttle = error * kp
+        brake = 0.0
+    else:
+        throttle = 0.0
+        brake = abs(error) * 0.5
 
 
     
     
-    # generate the output for throttle command
-    throttle = 0
-    brake = 0.0
-    # clip throttle and brake to [0, 1]
+
     return np.clip(throttle, 0.0, 1.0), np.clip(brake, 0.0, 1.0)
 
 def control(
@@ -78,7 +116,7 @@ def control(
    
     # TODO: implement your controller here
     steer = steering(path, state)
-    target_speed = 5.0  # m/s, adjust as needed
+    target_speed = 9 # m/s, adjust as needed
     global integral
     throttle, brake = throttle_algorithm(target_speed, state["vx"], 0.05)
 
